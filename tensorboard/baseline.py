@@ -140,10 +140,6 @@ class FSDD(Dataset):
         return self.features[index], self.label[index]
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--path_to_truth", type=str, help='テストデータの正解ファイルCSVのパス')
-    args = parser.parse_args()
-
     # データの読み込み
     training = pd.read_csv(os.path.join(root, "training.csv"))
     
@@ -158,13 +154,10 @@ def main():
             [train_size, val_size],
             torch.Generator().manual_seed(20200616))
 
-    if args.path_to_truth:
-        # Test Dataset の作成
-        test = pd.read_csv(args.path_to_truth)
-        test_dataset = FSDD(test["path"].values, test['label'].values)
-    else:
-        test_dataset = None
-        
+    # Test Dataset の作成
+    test = pd.read_csv(os.path.join(root, "test.csv"))
+    test_dataset = FSDD(test["path"].values, test['label'].values)
+    
     # DataModule の作成
     datamodule = pl.LightningDataModule.from_datasets(
         train_dataset=train_dataset,
@@ -174,21 +167,19 @@ def main():
         num_workers=4)
     
     # モデルの構築
-    model = my_MLP(input_dim=train_dataset[0][0].shape[0],
-                   output_dim=10)
+    model = my_MLP(input_dim=train_dataset[0][0].shape[0],output_dim=10)
     
     # 学習の設定
     trainer = pl.Trainer(max_epochs=100, gpus=1)
-    
+        
     # モデルの学習
     trainer.fit(model=model, datamodule=datamodule)
     
     # バリデーション
     trainer.validate(model=model, datamodule=datamodule)
     
-    if args.path_to_truth:
-        # テスト
-        trainer.test(model=model, datamodule=datamodule)
+    # テスト
+    trainer.test(model=model, datamodule=datamodule)
 
 
 if __name__ == "__main__":
