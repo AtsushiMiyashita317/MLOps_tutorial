@@ -1,0 +1,8 @@
+experiment_name: tune_model
+optim:
+  optimizer: Adadelta
+  lr: 1.0e-2
+model:
+  dim1: 256
+  dim2: 256
+  dropout: 0.2
