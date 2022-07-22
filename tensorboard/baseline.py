@@ -23,9 +23,11 @@ Trainer
 import argparse
 import os
 
+import hydra
 from matplotlib import pyplot as plt
 import pandas as pd
 import pytorch_lightning as pl
+from pytorch_lightning.loggers import TensorBoardLogger
 import seaborn as sns
 import torch
 import torchaudio
@@ -35,16 +37,18 @@ from torch.utils.data import Dataset, random_split
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 class my_MLP(pl.LightningModule):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, model, loss_fn, optimizer):
         super().__init__()
-        self.model = self.create_model(input_dim, output_dim)
-        self.loss_fn = torch.nn.CrossEntropyLoss()
+        self.model = self.create_model(input_dim, output_dim, model)
+        self.loss_fn = loss_fn
+        self.optimizer = getattr(torch.optim, optimizer.optimizer)(self.model.parameters(), lr=optimizer.lr)
         self.train_acc = torchmetrics.Accuracy()
         self.val_acc = torchmetrics.Accuracy()
         self.test_acc = torchmetrics.Accuracy()
         self.confm = torchmetrics.ConfusionMatrix(10, normalize='true')
+        self.save_hyperparameters({**model, **optimizer}, logger=False)
       
-    def create_model(self, input_dim, output_dim):
+    def create_model(self, input_dim, output_dim, model):
         """
         MLPモデルの構築
         Args:
@@ -54,13 +58,13 @@ class my_MLP(pl.LightningModule):
             model: 定義済みモデル
         """
         model = torch.nn.Sequential(
-            torch.nn.Linear(input_dim, 256),
+            torch.nn.Linear(input_dim, model.dim1),
             torch.nn.ReLU(),
-            torch.nn.Dropout(0.2),
-            torch.nn.Linear(256, 256),
+            torch.nn.Dropout(model.dropout),
+            torch.nn.Linear(model.dim1, model.dim2),
             torch.nn.ReLU(),
-            torch.nn.Dropout(0.2),
-            torch.nn.Linear(256, output_dim),
+            torch.nn.Dropout(model.dropout),
+            torch.nn.Linear(model.dim2, output_dim),
             torch.nn.Softmax(dim=-1)
         )
         # モデル構成の表示
@@ -81,15 +85,19 @@ class my_MLP(pl.LightningModule):
     def validation_step(self, batch, batch_idx, dataloader_id=None):
         x, y = batch
         pred = self.forward(x)
-        loss = self.loss_fn(pred, y)
-        self.log('val/acc', self.val_acc(pred,y), prog_bar=True, logger=True)
-        return loss
+        acc = self.val_acc(pred,y)
+        self.log('val/acc', acc, prog_bar=True, logger=True)
+        return acc
+    
+    def validation_epoch_end(self, outputs) -> None:
+        avg_acc = torch.stack(outputs).mean()
+        self.logger.log_hyperparams(self.hparams, metrics={'val/acc':avg_acc})
     
     def test_step(self, batch, batch_idx, dataloader_id=None):
         x, y = batch
         pred = self.forward(x)
-        loss = self.loss_fn(pred, y)
-        self.log('test/acc', self.test_acc(pred, y), prog_bar=True, logger=True)
+        acc = self.test_acc(pred, y)
+        self.log('test/acc', acc, prog_bar=True, logger=True)
         return {'pred':torch.argmax(pred, dim=-1), 'target':y}
     
     def test_epoch_end(self, outputs) -> None:
@@ -104,7 +112,6 @@ class my_MLP(pl.LightningModule):
         self.logger.experiment.add_figure("Confusion matrix", fig_, self.current_epoch)
 
     def configure_optimizers(self):
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.002)
         return self.optimizer
 
 class FSDD(Dataset):
@@ -139,7 +146,8 @@ class FSDD(Dataset):
     def __getitem__(self, index):
         return self.features[index], self.label[index]
 
-def main():
+@hydra.main(config_path='conf',config_name='config.yaml')
+def main(cfg):
     # データの読み込み
     training = pd.read_csv(os.path.join(root, "training.csv"))
     
@@ -166,11 +174,22 @@ def main():
         batch_size=32,
         num_workers=4)
     
+    loss_fn = torch.nn.CrossEntropyLoss()
     # モデルの構築
-    model = my_MLP(input_dim=train_dataset[0][0].shape[0],output_dim=10)
+    model = my_MLP(input_dim=train_dataset[0][0].shape[0],
+                   output_dim=10,
+                   model=cfg.model,
+                   loss_fn=loss_fn,
+                   optimizer=cfg.optim)
     
     # 学習の設定
-    trainer = pl.Trainer(max_epochs=100, gpus=1)
+    logger = TensorBoardLogger(
+        name=cfg.experiment_name, 
+        save_dir=os.path.join(
+            hydra.utils.get_original_cwd(),
+            'lightning_logs'),
+        default_hp_metric=False)
+    trainer = pl.Trainer(max_epochs=100, gpus=1, logger=logger)
         
     # モデルの学習
     trainer.fit(model=model, datamodule=datamodule)
