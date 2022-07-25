@@ -1,6 +1,5 @@
 .venv
 .vscode
-mlruns
+lightning_logs
 multirun
 outputs
-baseline.log

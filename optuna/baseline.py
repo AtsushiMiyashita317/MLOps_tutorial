@@ -24,9 +24,10 @@ import argparse
 import os
 
 import hydra
+from matplotlib import pyplot as plt
 import pandas as pd
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import MLFlowLogger
+from pytorch_lightning.loggers import TensorBoardLogger
 import seaborn as sns
 import torch
 import torchaudio
@@ -45,7 +46,7 @@ class my_MLP(pl.LightningModule):
         self.val_acc = torchmetrics.Accuracy()
         self.test_acc = torchmetrics.Accuracy()
         self.confm = torchmetrics.ConfusionMatrix(10, normalize='true')
-        self.save_hyperparameters({**model, **optimizer})
+        self.save_hyperparameters({**model, **optimizer}, logger=False)
       
     def create_model(self, input_dim, output_dim, model):
         """
@@ -84,18 +85,15 @@ class my_MLP(pl.LightningModule):
     def validation_step(self, batch, batch_idx, dataloader_id=None):
         x, y = batch
         pred = self.forward(x)
-        loss = self.loss_fn(pred, y)
-        self.log('val/acc', self.val_acc(pred,y), prog_bar=True, logger=True)
-        return loss
+        acc = self.val_acc(pred,y)
+        self.log('val/acc', acc, prog_bar=True, logger=True)
+        return acc
     
-    def test_step(self, batch, batch_idx, dataloader_id=None):
-        x, y = batch
-        pred = self.forward(x)
-        self.log('test/acc', self.test_acc(pred, y), prog_bar=True, logger=True)
-        return {'pred':torch.argmax(pred, dim=-1), 'target':y}
+    def validation_epoch_end(self, outputs) -> None:
+        avg_acc = torch.stack(outputs).mean()
+        self.logger.log_hyperparams(self.hparams, metrics={'val/acc':avg_acc})
     
     def configure_optimizers(self):
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=1e-2)
         return self.optimizer
 
 class FSDD(Dataset):
@@ -132,6 +130,7 @@ class FSDD(Dataset):
 
 @hydra.main(config_path='conf',config_name='config.yaml')
 def main(cfg):
+    print(cfg)
     # データの読み込み
     training = pd.read_csv(os.path.join(root, "training.csv"))
     
@@ -146,33 +145,28 @@ def main(cfg):
             [train_size, val_size],
             torch.Generator().manual_seed(20200616))
 
-    # Test Dataset の作成
-    test = pd.read_csv(os.path.join(root, "test.csv"))
-    test_dataset = FSDD(test["path"].values, test['label'].values)
-    
     # DataModule の作成
     datamodule = pl.LightningDataModule.from_datasets(
         train_dataset=train_dataset,
         val_dataset=val_dataset,
-        test_dataset=test_dataset,
         batch_size=32,
         num_workers=4)
     
     loss_fn = torch.nn.CrossEntropyLoss()
     # モデルの構築
-    model = my_MLP(
-        input_dim=train_dataset[0][0].shape[0],
-        output_dim=10,
-        model=cfg.model,
-        loss_fn=loss_fn,
-        optimizer=cfg.optim)
+    model = my_MLP(input_dim=train_dataset[0][0].shape[0],
+                   output_dim=10,
+                   model=cfg.model,
+                   loss_fn=loss_fn,
+                   optimizer=cfg.optim)
     
     # 学習の設定
-    logger = MLFlowLogger(
-        experiment_name=cfg.experiment_name, 
+    logger = TensorBoardLogger(
+        name=cfg.experiment_name, 
         save_dir=os.path.join(
             hydra.utils.get_original_cwd(),
-            'mlruns'))
+            'lightning_logs'),
+        default_hp_metric=False)
     trainer = pl.Trainer(max_epochs=100, gpus=1, logger=logger)
         
     # モデルの学習
@@ -181,8 +175,7 @@ def main(cfg):
     # バリデーション
     trainer.validate(model=model, datamodule=datamodule)
     
-    # テスト
-    trainer.test(model=model, datamodule=datamodule)
+    return trainer.callback_metrics['val/acc']
 
 
 if __name__ == "__main__":
