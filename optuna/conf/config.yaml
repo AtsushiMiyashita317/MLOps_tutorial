@@ -1,0 +1,32 @@
+# base
+optim:
+  optimizer: Adadelta
+  lr: 1.0e-2
+model:
+  dim1: 256
+  dim2: 256
+  dropout: 0.2
+
+defaults:
+  - override hydra/sweeper: optuna
+  - override hydra/sweeper/sampler: tpe
+experiment_name: test_tpe
+hydra:
+  sweeper:
+    # optuna setting
+    sampler:
+      seed: 123
+    direction: maximize
+    study_name: test_tpe
+    storage: null
+    n_trials: 100
+    n_jobs: 1
+    # range of seach space
+    params:
+      optim.optimizer: choice('SGD','Adadelta','Adam','NAdam','RAdam')
+      optim.lr: tag(log,interval(1.0e-6,1.0))
+      model.dim1: range(64,1024)
+      model.dim2: range(64,1024)
+      model.dropout: interval(0.0,1.0)
+
+

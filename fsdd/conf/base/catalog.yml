@@ -1,0 +1,44 @@
+# Here you can define all your data sets by using simple YAML syntax.
+#
+# Documentation for this file format can be found in "The Data Catalog"
+# Link: https://kedro.readthedocs.io/en/stable/data/data_catalog.html
+
+train_annotations:
+  type: pandas.CSVDataSet
+  filepath: data/01_raw/train.csv
+
+test_annotations:
+  type: pandas.CSVDataSet
+  filepath: data/01_raw/test.csv
+
+dev_annotations:
+  type: pandas.CSVDataSet
+  filepath: data/02_intermediate/dev.csv
+
+val_annotations:
+  type: pandas.CSVDataSet
+  filepath: data/02_intermediate/val.csv
+
+train_data:
+  # custom DataCatalog class(non official)
+  type: fsdd.io.catalogs.TensorDataSet
+  filepath: data/05_model_input/train.pt
+
+test_data:
+  # custom DataCatalog class(non official)
+  type: fsdd.io.catalogs.TensorDataSet
+  filepath: data/05_model_input/test.pt
+
+dev_data:
+  # custom DataCatalog class(non official)
+  type: fsdd.io.catalogs.TensorDataSet
+  filepath: data/05_model_input/dev.pt
+
+val_data:
+  # custom DataCatalog class(non official)
+  type: fsdd.io.catalogs.TensorDataSet
+  filepath: data/05_model_input/val.pt
+
+best_params:
+  type: yaml.YAMLDataSet
+  filepath: data/05_models/best_params.yaml

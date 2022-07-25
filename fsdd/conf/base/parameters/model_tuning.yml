@@ -1,0 +1,13 @@
+# This is a boilerplate parameters config generated for pipeline 'model_tuning'
+# using Kedro 0.18.2.
+#
+# Documentation for this file format can be found in "Parameters"
+# Link: https://kedro.readthedocs.io/en/0.18.2/kedro_project_setup/configuration.html#parameters
+
+optim:
+  optimizer: Adadelta
+  lr: 1.0e-2
+model:
+  dim1: 256
+  dim2: 256
+  dropout: 0.2
