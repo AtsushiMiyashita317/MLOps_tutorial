@@ -1,12 +1,12 @@
 # TensorBoard tutorial
 
-## setup
+## Setup
 Under appropriate virtual environment:
 ```sh
 pip install -r requirement.txt
 ```
 
-## execute
+## Execute
 
 ```sh
 python baseline.py
@@ -16,7 +16,7 @@ python baseline.py
 python baseline.py --multirun
 ```
 
-## show results
+## Show results
 
 - vscode user
 
