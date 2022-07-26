@@ -18,3 +18,9 @@ python baseline.py --multirun
   ```sh
   mlflow ui
   ```
+
+## Configuration
+Edit `conf/config.yaml`.
+
+See https://hydra.cc/docs/plugins/optuna_sweeper/
+
